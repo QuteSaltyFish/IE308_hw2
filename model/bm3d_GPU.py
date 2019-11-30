@@ -1,29 +1,31 @@
 import torch as t
 import torchvision as tv
-import numpy as np
+
 from torchvision import transforms
 from PIL import Image
 import json
-from wavelet import wavelet
+from wavelet_GPU import wavelet_GPU
+from time import time
 
 
-class BM3D():
+class BM3D_GPU():
     def __init__(self, pic_dir='src/img.jpg', data=None):
         super().__init__()
+        self.config = json.load(open('config.json'))
+        self.DEVICE = self.config["DEVICE"]
         if data is None:
-            self.config = json.load(open('config.json'))
-            self.PIC = np.array(Image.open(pic_dir)).transpose(2, 0, 1)
+            self.PIC = transforms.ToTensor()(Image.open(pic_dir)).to(self.DEVICE)
         else:
             # Only for debug
 
-            self.PIC = np.expand_dims(data, axis=0)
+            self.PIC = data.unsqueeze(0)
         # Define some parameters
         self.BLOCK_SIZE = 5
         self.BLK_STRIDE = 3
         self.WINDOW_SIZE = 25
         self.TH = 2500
         self.MAX_COUNT = 400
-        self.WAVELET = wavelet()
+        self.WAVELET = wavelet_GPU()
 
         self.ASSEMBLE_DICT = {}
 
@@ -61,13 +63,15 @@ class BM3D():
         assert window.shape[-1] == 25
         [M, N] = window.shape[-2:]
         try:
-            window = np.pad(window, [[0, 0], [self.BLOCK_SIZE//2, self.BLOCK_SIZE//2], [
-                            self.BLOCK_SIZE//2, self.BLOCK_SIZE//2]], mode='reflect')
+            window = window.unsqueeze(0)
+            window = t.nn.functional.pad(window, (self.BLOCK_SIZE//2,self.BLOCK_SIZE//2,self.BLOCK_SIZE//2,self.BLOCK_SIZE//2), 'reflect').squeeze(0)
         except:
-            print("windo padding error")
-
+            print("windows padding error")
+        assert window.shape[-2] == 29
+        assert window.shape[-1] == 29
         # add the origin block into the dict
-        ori_blk = window[:, x-xl:x-xl+self.BLOCK_SIZE, y-yl:y-yl+self.BLOCK_SIZE]
+        ori_blk = window[:, x-xl:x-xl +
+                         self.BLOCK_SIZE, y-yl:y-yl+self.BLOCK_SIZE]
         assert ori_blk.shape[-2] == self.BLOCK_SIZE
         assert ori_blk.shape[-1] == self.BLOCK_SIZE
         ori_blk_DWT = self.DWT2D(ori_blk)
@@ -94,39 +98,39 @@ class BM3D():
 
         # Start to compare the distance
         LIST = self.ASSEMBLE_DICT['{}_{}'.format(x, y)]
-        LIST = sorted(LIST, key=lambda x: np.sum((x-ori_blk_DWT)**2))
+        LIST = sorted(LIST, key=lambda x: t.sum((x-ori_blk_DWT)**2))
         LIST = LIST[:self.MAX_COUNT]
         self.ASSEMBLE_DICT['{}_{}'.format(x, y)] = LIST
 
     def DWT2D(self, X):
         out = self.WAVELET.dwt(X)
-        out = self.WAVELET.dwt(out.transpose(0, 2, 1)).transpose(0, 2, 1)
+        out = self.WAVELET.dwt(out.permute(0, 2, 1)).permute(0, 2, 1)
         return out
 
     def iDWT2D(self, X):
         out = self.WAVELET.idwt(X)
-        out = self.WAVELET.idwt(out.transpose(0, 2, 1)).transpose(0, 2, 1)
+        out = self.WAVELET.idwt(out.permute(0, 2, 1)).permute(0, 2, 1)
         return out
 
     def DFT(self, X):
         [M, N] = X.shape
-        tmp1 = np.arange(M).reshape(-1, 1)
-        tmp2 = np.arange(N).reshape(-1, 1)
+        tmp1 = t.arange(M).reshape(-1, 1)
+        tmp2 = t.arange(N).reshape(-1, 1)
         x1 = tmp1.T*tmp1
         x2 = tmp2.T*tmp2
-        Wr = np.exp(-2*np.pi*1j*x1/M)
-        Wc = np.exp(-2*np.pi*1j*x2/N)
+        Wr = t.exp(-2*t.pi*1j*x1/M)
+        Wc = t.exp(-2*t.pi*1j*x2/N)
         F = Wr.dot(X).dot(Wc)
         return F
 
     def IDFT(self, X):
         [M, N] = X.shape
-        tmp1 = np.arange(M).reshape(-1, 1)
-        tmp2 = np.arange(N).reshape(-1, 1)
+        tmp1 = t.arange(M).reshape(-1, 1)
+        tmp2 = t.arange(N).reshape(-1, 1)
         x1 = tmp1.T*tmp1
         x2 = tmp2.T*tmp2
-        Wr = np.exp(2*np.pi*1j*x1/M)
-        Wc = np.exp(2*np.pi*1j*x2/N)
+        Wr = t.exp(2*t.pi*1j*x1/M)
+        Wc = t.exp(2*t.pi*1j*x2/N)
         F = Wr.dot(X).dot(Wc)
         return F
 
@@ -135,15 +139,17 @@ class BM3D():
         for i in range(self.PIC.shape[1]):
             for j in range(self.PIC.shape[2]):
                 self.find_simier_blk(i, j)
-                print('{}_{} done.'.format(i,j))
+                print('{}_{} done.'.format(i, j))
         print('completed')
 
 
 if __name__ == "__main__":
-
-    a = np.random.randn(64, 64)
-    model = BM3D(data=a)
+    starttime = time()
+    a = t.randn(64, 64).to('cuda')
+    model = BM3D_GPU(data=a)
     model.Stage_One()
-    print(model.DFT(a), model.DFT(a).shape)
-    result = model.IDFT(model.DFT(a))
-    print(np.sum((a-result)**2))
+    endtime = time()
+    print('\n\n\n Cost time:{}'.format(endtime-starttime))
+    # print(model.DFT(a), model.DFT(a).shape)
+    # result = model.IDFT(model.DFT(a))
+    # print(t.sum((a-result)**2))

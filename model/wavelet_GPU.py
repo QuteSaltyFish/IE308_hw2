@@ -1,15 +1,16 @@
 import torch as t
 import torchvision as tv
-import numpy as np
 from torchvision import transforms
 from PIL import Image
 import json
-
-class wavelet():
+import numpy as np
+class wavelet_GPU():
     '''
     Used to stored the mateix of wavelet 
     '''
     def __init__(self):
+        self.config = json.load(open('config.json'))
+        self.DEVICE = self.config["DEVICE"]
         self.M_dict = {}
         self.iM_dict = {}
     
@@ -25,7 +26,7 @@ class wavelet():
             #print('Not Exist In the Dict')
             self.M_dict['{}_{}'.format(size, idx)] = []
             while(loop != 0):
-                w = np.identity(size, dtype=float)
+                w = t.eye(size, dtype=t.float, device=self.DEVICE)
                 w[:2*loop, :2*loop] = 0
                 for i in range(loop):
                     w[2*i, i] = 0.5
@@ -37,7 +38,7 @@ class wavelet():
                 loop -= 1
         finally:
             for w in self.M_dict['{}_{}'.format(size, idx)]:
-                data = data.dot(w)
+                data = data.mm(w)
             #print(data)
             return data
             
@@ -52,30 +53,30 @@ class wavelet():
             loop = idx
             #print('Not Exist In the Dict')
             try:
-                self.iM_dict['{}_{}'.format(size, idx)] = [np.linalg.inv(item) for item in self.M_dict['{}_{}'.format(size, idx)]]
+                self.iM_dict['{}_{}'.format(size, idx)] = [t.inv(item) for item in self.M_dict['{}_{}'.format(size, idx)]]
                 self.iM_dict['{}_{}'.format(size, idx)].reverse()
             except:
                 self.iM_dict['{}_{}'.format(size, idx)] = []
                 while(loop != 0):
-                    w = np.identity(size, dtype=float)
+                    w = t.eye(size, dtype=t.float,device=self.DEVICE)
                     w[:2*loop, :2*loop] = 0
                     for i in range(loop):
                         w[2*i, i] = 0.5
                         w[2*i+1, i] = 0.5
                         w[2*i, i+loop] = 0.5
                         w[2*i+1, i+loop] = -0.5
-                    self.iM_dict['{}_{}'.format(size, idx)].append(np.linalg.inv(w))
+                    self.iM_dict['{}_{}'.format(size, idx)].append(t.inv(w))
                     #print(w)
                     loop -= 1
                 self.iM_dict['{}_{}'.format(size, idx)].reverse()
         finally:
             for w in self.iM_dict['{}_{}'.format(size, idx)]:
-                data = data.dot(w)
+                data = data.mm(w)
             #print(data)
             return data
 
 if __name__ == "__main__":
-    a = np.array([9, 7, 3, 5])
+    a = t.tensor([9, 7, 3, 5]).to('cuda')
     wavelet = wavelet()
     out = wavelet.dwt(a)
     out = wavelet.idwt(out)
