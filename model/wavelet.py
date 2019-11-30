@@ -14,7 +14,7 @@ class wavelet():
         self.iM_dict = {}
     
     def dwt(self, data):
-        size = np.max(data.shape)
+        size = data.shape[-1]
         idx = (int)(np.log2(size))
         try: 
             # TO test if have the weight stored in the dict
@@ -42,7 +42,7 @@ class wavelet():
             return data
             
     def idwt(self, data):
-        size = np.max(data.shape)
+        size = data.shape[-1]
         idx = (int)(np.log2(size))
         try: 
             # TO test if have the weight stored in the dict
