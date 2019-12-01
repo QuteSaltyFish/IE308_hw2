@@ -145,7 +145,7 @@ class BM3D_GPU():
 
 if __name__ == "__main__":
     starttime = time()
-    a = t.randn(64, 64).to('cuda')
+    a = t.randn(64, 64)
     model = BM3D_GPU(data=a)
     model.Stage_One()
     endtime = time()

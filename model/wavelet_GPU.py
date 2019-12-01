@@ -38,7 +38,7 @@ class wavelet_GPU():
                 loop -= 1
         finally:
             for w in self.M_dict['{}_{}'.format(size, idx)]:
-                data = data.mm(w)
+                data = t.matmul(data, w)
             #print(data)
             return data
             
@@ -71,12 +71,12 @@ class wavelet_GPU():
                 self.iM_dict['{}_{}'.format(size, idx)].reverse()
         finally:
             for w in self.iM_dict['{}_{}'.format(size, idx)]:
-                data = data.mm(w)
+                data = t.matmul(data, w)
             #print(data)
             return data
 
 if __name__ == "__main__":
-    a = t.tensor([9, 7, 3, 5]).to('cuda')
-    wavelet = wavelet()
+    a = t.tensor([[9, 7, 3, 5]], dtype=t.float).to('cuda')
+    wavelet = wavelet_GPU()
     out = wavelet.dwt(a)
     out = wavelet.idwt(out)
